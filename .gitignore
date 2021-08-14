@@ -1,0 +1,8 @@
+# Directories
+.vscode/
+.terraform/
+
+# Files
+*.state
+*.tfstate
+*.lock.hcl
