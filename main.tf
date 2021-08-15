@@ -1,45 +1,28 @@
 // Resource Groups
-resource "azurerm_resource_group" "learning" {
-  // Key Values
-  name     = var.tags.project-name
-  location = var.tf-region
-
+module "azure_resource_group" {
+  // Module Source Directory
+  source = "./modules/resource-groups"
+  // Variables
+  tf-region = var.tf-region
   // Tags
-  tags = merge({
-      "Name" = var.tags.project-name
-    },
-    var.global-tags
-  )
+  tags = var.tags
+  global-tags = var.global-tags
 }
 
 // Virtual Network; define the primary CIDR
-resource "azurerm_virtual_network" "primary_cidr" {
+module "virtual_net" {
+  // Module Source Directory
+  source = "./modules/networking/virtual-network"
   // Resource Group Association
-  resource_group_name = azurerm_resource_group.learning.name
-
-  // Key Values
-  name                = var.networking.primary_cidr_name
-  address_space       = [ var.networking.primary_cidr ]
-  location            = azurerm_resource_group.learning.location
-
+  resource_group_name = module.azure_resource_group.resource_group_name
+  location            = module.azure_resource_group.location
+  // Variables
+  networking          = var.networking
   // Tags
-  tags = merge({
-      "Name" = "${var.tags.project-name} Primary CIDR"
-    },
-    var.global-tags
-  )
+  tags        = var.tags
+  global-tags = var.global-tags
 }
 
-// Azure Firewall
-resource "azurerm_subnet" "azurefirewall" {
-  // Resource Group Association
-  resource_group_name = azurerm_resource_group.learning.name
-
-  // Key Values
-  name                 = "AzureFirewallSubnet"
-  virtual_network_name = azurerm_virtual_network.primary_cidr.name
-  address_prefixes     = [ var.networking.firewall_subnet ]
-}
 
 // Subnet definition
 resource "azurerm_subnet" "public_subnets" {
@@ -47,19 +30,19 @@ resource "azurerm_subnet" "public_subnets" {
   for_each = { for name, cidr in var.networking.public_subnets : name => cidr }
 
   // Resource Group Association
-  resource_group_name = azurerm_resource_group.learning.name
+  resource_group_name = module.azure_resource_group.resource_group_name
 
   // Key Values
   name                 = each.key
-  virtual_network_name = azurerm_virtual_network.primary_cidr.name
+  virtual_network_name = module.virtual_net.name
   address_prefixes     = [ each.value ]
 }
 
 // Creates a Public IP Address
 resource "azurerm_public_ip" "k3s-host" {
   // Resource Group Association
-  resource_group_name = azurerm_resource_group.learning.name
-  location            = azurerm_resource_group.learning.location
+  resource_group_name = module.azure_resource_group.resource_group_name
+  location            = module.azure_resource_group.location
 
   // Key Values
   name                = lower("${var.k3s-vm.name}-public-ip")
@@ -77,8 +60,8 @@ resource "azurerm_public_ip" "k3s-host" {
 // Defining Virtual Machine Resources - Networking
 resource "azurerm_network_interface" "k3s-net-int" {
   // Resource Group Association
-  resource_group_name = azurerm_resource_group.learning.name
-  location            = azurerm_resource_group.learning.location
+  resource_group_name = module.azure_resource_group.resource_group_name
+  location            = module.azure_resource_group.location
 
   // Key Values
   name                  = "${var.networking.primary_cidr_name}-${var.k3s-vm.name}-nic"
@@ -104,44 +87,26 @@ resource "azurerm_network_interface" "k3s-net-int" {
   ]
 }
 
-// Defining Virtual Machine Resources - Virtual Machine
-resource "azurerm_linux_virtual_machine" "k3s" {
+module "k3s-host" {
+  // Module Source Directory
+  source = "./modules/compute"
   // Resource Group Association
-  resource_group_name = azurerm_resource_group.learning.name
-  location            = azurerm_resource_group.learning.location
-
-  // Key Values
-  name                = var.k3s-vm.name
-  size                = var.k3s-vm.size
-  admin_username      = var.ssh_information.username
-  network_interface_ids = [
-    azurerm_network_interface.k3s-net-int.id,
-  ]
-
-  admin_ssh_key {
-    username   = var.ssh_information.username
-    public_key = var.ssh_information.pubkey
-  }
-
-  os_disk {
-    caching               = "ReadWrite"
-    storage_account_type  = "Standard_LRS"
-    disk_size_gb          = var.k3s-vm.disk_size
-  }
-
-  source_image_reference {
-    publisher = var.k3s-vm.image_references.publisher
-    offer     = var.k3s-vm.image_references.offer
-    sku       = var.k3s-vm.image_references.sku
-    version   = var.k3s-vm.image_references.version
-  }
+  resource_group_name = module.azure_resource_group.resource_group_name
+  location            = module.azure_resource_group.location
+  // Variables
+  vm-settings         = var.k3s-vm
+  ssh-settings        = var.ssh_information
+  net_interface_ids   = toset([ azurerm_network_interface.k3s-net-int.id ])
+  // Tags
+  tags        = var.tags
+  global-tags = var.global-tags
 }
 
 // Firewall Rules
 resource "azurerm_network_security_group" "k3s_ingress" {
   // Resource Group Association
-  resource_group_name = azurerm_resource_group.learning.name
-  location            = azurerm_resource_group.learning.location
+  resource_group_name = module.azure_resource_group.resource_group_name
+  location            = module.azure_resource_group.location
 
   // Key Values
   name                = "${var.tags.project-name}-k3s_ingress"
@@ -150,15 +115,20 @@ resource "azurerm_network_security_group" "k3s_ingress" {
   tags = var.global-tags
 }
 
-
 resource "azurerm_subnet_network_security_group_association" "secure_k3s_ingress" {
   subnet_id                 = azurerm_subnet.public_subnets[var.k3s-vm.eni.subnet].id
   network_security_group_id = azurerm_network_security_group.k3s_ingress.id
 }
 
+resource "azurerm_network_interface_security_group_association" "secure_k3s_ingress" {
+  network_interface_id          = azurerm_network_interface.k3s-net-int.id
+  network_security_group_id = azurerm_network_security_group.k3s_ingress.id
+}
+
+
 resource "azurerm_network_security_rule" "ssh_22_inbound" {
   // Resource Group Association
-  resource_group_name = azurerm_resource_group.learning.name
+  resource_group_name = module.azure_resource_group.resource_group_name
   network_security_group_name = azurerm_network_security_group.k3s_ingress.name
 
   // Key Values
@@ -175,7 +145,7 @@ resource "azurerm_network_security_rule" "ssh_22_inbound" {
 
 resource "azurerm_network_security_rule" "http_80_inbound" {
   // Resource Group Association
-  resource_group_name = azurerm_resource_group.learning.name
+  resource_group_name = module.azure_resource_group.resource_group_name
   network_security_group_name = azurerm_network_security_group.k3s_ingress.name
 
   // Key Values
@@ -192,7 +162,7 @@ resource "azurerm_network_security_rule" "http_80_inbound" {
 
 resource "azurerm_network_security_rule" "https_443_inbound" {
   // Resource Group Association
-  resource_group_name = azurerm_resource_group.learning.name
+  resource_group_name = module.azure_resource_group.resource_group_name
   network_security_group_name = azurerm_network_security_group.k3s_ingress.name
 
   // Key Values
@@ -205,4 +175,38 @@ resource "azurerm_network_security_rule" "https_443_inbound" {
   destination_port_range      = "443"
   source_address_prefix       = "*"
   destination_address_prefix  = azurerm_public_ip.k3s-host.ip_address
+}
+
+resource "azurerm_network_security_rule" "icmp_inbound" {
+  // Resource Group Association
+  resource_group_name = module.azure_resource_group.resource_group_name
+  network_security_group_name = azurerm_network_security_group.k3s_ingress.name
+
+  // Key Values
+  name                        = "icmp_inbound"
+  priority                    = 103
+  direction                   = "Inbound"
+  access                      = "Allow"
+  protocol                    = "Icmp"
+  source_port_range           = "*"
+  destination_port_range      = "*"
+  source_address_prefix       = "*"
+  destination_address_prefix  = azurerm_public_ip.k3s-host.ip_address
+}
+
+resource "azurerm_network_security_rule" "traffic_outbound" {
+  // Resource Group Association
+  resource_group_name = module.azure_resource_group.resource_group_name
+  network_security_group_name = azurerm_network_security_group.k3s_ingress.name
+
+  // Key Values
+  name                        = "traffic_outbound"
+  priority                    = 100
+  direction                   = "Outbound"
+  access                      = "Allow"
+  protocol                    = "*"
+  source_port_range           = "*"
+  destination_port_range      = "*"
+  source_address_prefix       = azurerm_public_ip.k3s-host.ip_address
+  destination_address_prefix  = "*"
 }
