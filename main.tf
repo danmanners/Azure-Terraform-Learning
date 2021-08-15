@@ -88,6 +88,7 @@ resource "azurerm_network_interface" "k3s-net-int" {
   ip_configuration {
     name                          = var.k3s-vm.eni.name
     subnet_id                     = azurerm_subnet.public_subnets[var.k3s-vm.eni.subnet].id
+    public_ip_address_id          = azurerm_public_ip.k3s-host.id
     private_ip_address_allocation = "Dynamic"
   }
 
@@ -136,66 +137,72 @@ resource "azurerm_linux_virtual_machine" "k3s" {
   }
 }
 
-// Firewalling
-resource "azurerm_firewall" "k3s-ingress" {
+// Firewall Rules
+resource "azurerm_network_security_group" "k3s_ingress" {
   // Resource Group Association
   resource_group_name = azurerm_resource_group.learning.name
   location            = azurerm_resource_group.learning.location
 
   // Key Values
-  name                = var.k3s-firewall.name
+  name                = "${var.tags.project-name}-k3s_ingress"
 
-  ip_configuration {
-    name                 = "${var.tags.project-name}-azure-firewall"
-    subnet_id            = azurerm_subnet.azurefirewall.id
-    public_ip_address_id = azurerm_public_ip.k3s-host.id
-  }
-
-  // Depends on the public IP being available
-  depends_on=[
-    azurerm_public_ip.k3s-host
-  ]
-
+  // Tags
+  tags = var.global-tags
 }
 
-// Firewall Rules
-resource "azurerm_firewall_nat_rule_collection" "tcp_ingress" {
+
+resource "azurerm_subnet_network_security_group_association" "secure_k3s_ingress" {
+  subnet_id                 = azurerm_subnet.public_subnets[var.k3s-vm.eni.subnet].id
+  network_security_group_id = azurerm_network_security_group.k3s_ingress.id
+}
+
+resource "azurerm_network_security_rule" "ssh_22_inbound" {
   // Resource Group Association
   resource_group_name = azurerm_resource_group.learning.name
+  network_security_group_name = azurerm_network_security_group.k3s_ingress.name
 
   // Key Values
-  name                = "k3s_ingress"
-  azure_firewall_name = azurerm_firewall.k3s-ingress.name
-  priority            = 100
-  action              = "Dnat"
+  name                        = "ssh_22_inbound"
+  priority                    = 100
+  direction                   = "Inbound"
+  access                      = "Allow"
+  protocol                    = "Tcp"
+  source_port_range           = "*"
+  destination_port_range      = "22"
+  source_address_prefix       = "*"
+  destination_address_prefix  = azurerm_public_ip.k3s-host.ip_address
+}
 
-  rule {
-    name = "22_ssh_inbound"
-    source_addresses      = var.k3s-firewall.ingress_rules.source_addresses
-    destination_ports     = [ "22" ]
-    destination_addresses = [ azurerm_public_ip.k3s-host.ip_address ]
-    translated_address    = azurerm_network_interface.k3s-net-int.private_ip_address
-    translated_port       = "22"
-    protocols = var.k3s-firewall.ingress_rules.protocols
-  }
+resource "azurerm_network_security_rule" "http_80_inbound" {
+  // Resource Group Association
+  resource_group_name = azurerm_resource_group.learning.name
+  network_security_group_name = azurerm_network_security_group.k3s_ingress.name
 
-  rule {
-    name = "80_http_inbound"
-    source_addresses      = var.k3s-firewall.ingress_rules.source_addresses
-    destination_ports     = [ "80" ]
-    destination_addresses = [ azurerm_public_ip.k3s-host.ip_address ]
-    translated_address    = azurerm_network_interface.k3s-net-int.private_ip_address
-    translated_port       = "80"
-    protocols = var.k3s-firewall.ingress_rules.protocols
-  }
+  // Key Values
+  name                        = "http_80_inbound"
+  priority                    = 101
+  direction                   = "Inbound"
+  access                      = "Allow"
+  protocol                    = "Tcp"
+  source_port_range           = "*"
+  destination_port_range      = "80"
+  source_address_prefix       = "*"
+  destination_address_prefix  = azurerm_public_ip.k3s-host.ip_address
+}
 
-  rule {
-    name = "443_https_inbound"
-    source_addresses      = var.k3s-firewall.ingress_rules.source_addresses
-    destination_ports     = [ "443" ]
-    destination_addresses = [ azurerm_public_ip.k3s-host.ip_address ]
-    translated_address    = azurerm_network_interface.k3s-net-int.private_ip_address
-    translated_port       = "443"
-    protocols = var.k3s-firewall.ingress_rules.protocols
-  }
+resource "azurerm_network_security_rule" "https_443_inbound" {
+  // Resource Group Association
+  resource_group_name = azurerm_resource_group.learning.name
+  network_security_group_name = azurerm_network_security_group.k3s_ingress.name
+
+  // Key Values
+  name                        = "https_443_inbound"
+  priority                    = 102
+  direction                   = "Inbound"
+  access                      = "Allow"
+  protocol                    = "Tcp"
+  source_port_range           = "*"
+  destination_port_range      = "443"
+  source_address_prefix       = "*"
+  destination_address_prefix  = azurerm_public_ip.k3s-host.ip_address
 }
