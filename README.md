@@ -2,6 +2,36 @@
 
 This repo is a bit of a brain dump for learning Azure through Terraform.
 
+## Resources Created
+
+- Resource Group
+- Virtual Network
+- Private Subnet
+- Public IP Address
+- Network Interface
+- Virtual Machine
+- Security Group & Rules
+
+## Spinning things up - Terragrunt
+
+```bash
+# Initialize things
+terragrunt init
+
+# Deploy infrastructure
+terragrunt apply
+```
+
+## Spinning things up - Terraform
+
+```bash
+# Initialize things
+terraform init
+
+# Deploy infrastructure
+terraform apply -var-file=environment/us-east.tfvars
+```
+
 ## Troubleshooting and initializing
 
 I first received this issue when running `terraform init`:
@@ -23,12 +53,3 @@ Well, that seemed odd. After googling for it, I realize that while I **had** run
 gcloud auth application-default login
 ```
 
-## Spinning things up
-
-```bash
-# Initialize things
-terraform init
-
-# Deploy infrastructure
-terraform apply
-```
