@@ -140,7 +140,7 @@ resource "azurerm_network_security_rule" "ssh_22_inbound" {
   source_port_range           = "*"
   destination_port_range      = "22"
   source_address_prefix       = "*"
-  destination_address_prefix  = azurerm_public_ip.k3s-host.ip_address
+  destination_address_prefix  = "*"
 }
 
 resource "azurerm_network_security_rule" "http_80_inbound" {
@@ -157,7 +157,7 @@ resource "azurerm_network_security_rule" "http_80_inbound" {
   source_port_range           = "*"
   destination_port_range      = "80"
   source_address_prefix       = "*"
-  destination_address_prefix  = azurerm_public_ip.k3s-host.ip_address
+  destination_address_prefix  = "*"
 }
 
 resource "azurerm_network_security_rule" "https_443_inbound" {
@@ -174,7 +174,7 @@ resource "azurerm_network_security_rule" "https_443_inbound" {
   source_port_range           = "*"
   destination_port_range      = "443"
   source_address_prefix       = "*"
-  destination_address_prefix  = azurerm_public_ip.k3s-host.ip_address
+  destination_address_prefix  = "*"
 }
 
 resource "azurerm_network_security_rule" "icmp_inbound" {
@@ -191,7 +191,7 @@ resource "azurerm_network_security_rule" "icmp_inbound" {
   source_port_range           = "*"
   destination_port_range      = "*"
   source_address_prefix       = "*"
-  destination_address_prefix  = azurerm_public_ip.k3s-host.ip_address
+  destination_address_prefix  = "*"
 }
 
 resource "azurerm_network_security_rule" "traffic_outbound" {
@@ -207,6 +207,7 @@ resource "azurerm_network_security_rule" "traffic_outbound" {
   protocol                    = "*"
   source_port_range           = "*"
   destination_port_range      = "*"
-  source_address_prefix       = azurerm_public_ip.k3s-host.ip_address
+  source_address_prefix       = "*"
+  # source_address_prefix       = azurerm_public_ip.k3s-host.ip_address
   destination_address_prefix  = "*"
 }
