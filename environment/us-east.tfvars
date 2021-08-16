@@ -22,7 +22,7 @@ ssh_information = {
 
 // Virtual Machine Setup
 k3s-vm = {
-  name = "k3s-host"
+  name = "tpi-k3s-azure-edge"
   size = "Standard_B2s"
   disk_size = "32"
 
@@ -44,7 +44,6 @@ k3s-firewall = {
   name = "k3s-ingress"
   ingress_rules = {
     source_addresses = [ "*" ]
-    destination_ports = [ "22", "80", "443" ]
     protocols = [ "TCP" ]
   }
 }
